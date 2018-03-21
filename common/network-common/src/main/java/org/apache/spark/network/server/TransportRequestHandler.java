@@ -122,6 +122,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
   }
 
+  /**
+   * 处理块获取请求
+   */
   private void processFetchRequest(final ChunkFetchRequest req) {
     if (logger.isTraceEnabled()) {
       logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel),
@@ -130,8 +133,13 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
     ManagedBuffer buf;
     try {
+      // 校验客户端时候有权限从给定的流中读取
       streamManager.checkAuthorization(reverseClient, req.streamChunkId.streamId);
+      // 将一个流和一条（只能是一条）客户端的 TCP 连接关联起来，这可以保证对于单个的流只会有一个客户端读取。
+      // 流关闭之后就永远不能够重用了
       streamManager.registerChannel(channel, req.streamChunkId.streamId);
+      // 获取单个的块（块被封装为ManagedBuffer）。由于单个的流只能与单个的 TCP 连接相关联，
+      // 因此getChunk方法不能为了某个特殊的流而并行调用。
       buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
     } catch (Exception e) {
       logger.error(String.format("Error opening block %s for request from %s",

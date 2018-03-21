@@ -38,6 +38,11 @@ public abstract class RpcHandler {
    *
    * This method will not be called in parallel for a single TransportClient (i.e., channel).
    *
+   * 用于接收单一的 RPC 消息，具体处理逻辑需要子类去实现。receive 接收3个参数，
+   * 分别是 TransportClient、ByteBuffer、RpcResponseCallback。
+   * RpcResponseCallback 用于对请求处理结束后进行回调，无论处理结果是成功还是失败，
+   * RpcResponseCallback 都会被调用一次。
+   *
    * @param client A channel client which enables the handler to make requests back to the sender
    *               of this RPC. This will always be the exact same object for a particular channel.
    * @param message The serialized bytes of the RPC.
@@ -52,6 +57,8 @@ public abstract class RpcHandler {
   /**
    * Returns the StreamManager which contains the state about which streams are currently being
    * fetched by a TransportClient.
+   *
+   * StreamManager可以从流中获取单个的块，因此它也包含着当前正在被 TransportClient 获取的流的状态
    */
   public abstract StreamManager getStreamManager();
 
@@ -70,15 +77,22 @@ public abstract class RpcHandler {
 
   /**
    * Invoked when the channel associated with the given client is active.
+   *
+   * 当与给定客户端相关联的 Channel 处于活动状态时调用
    */
   public void channelActive(TransportClient client) { }
 
   /**
    * Invoked when the channel associated with the given client is inactive.
    * No further requests will come from this client.
+   *
+   * 当与给定客户端相关联的 Channel 处于非活动状态时调用
    */
   public void channelInactive(TransportClient client) { }
 
+  /**
+   * 当 channel 产生异常时调用
+   */
   public void exceptionCaught(Throwable cause, TransportClient client) { }
 
   private static class OneWayRpcCallback implements RpcResponseCallback {

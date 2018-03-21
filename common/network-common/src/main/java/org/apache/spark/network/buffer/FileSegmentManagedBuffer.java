@@ -39,7 +39,9 @@ import org.apache.spark.network.util.TransportConf;
 public final class FileSegmentManagedBuffer extends ManagedBuffer {
   private final TransportConf conf;
   private final File file;
+  // 读取文件的偏移量
   private final long offset;
+  // 所要读取的长度
   private final long length;
 
   public FileSegmentManagedBuffer(TransportConf conf, File file, long offset, long length) {
