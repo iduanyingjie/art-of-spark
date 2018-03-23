@@ -25,6 +25,9 @@ import org.apache.spark.util.ListenerBus
  * Streaming events as WrappedStreamingListenerEvent and send them to Spark listener bus. It also
  * registers itself with Spark listener bus, so that it can receive WrappedStreamingListenerEvents,
  * unwrap them as StreamingListenerEvent and dispatch them to StreamingListeners.
+ *
+ * 用于将StreamingListenerEvent类型的事件投递到StreamingListener类型的监听器，
+ * 此外还会将StreamingListenerEvent类型的事件交给SparkListenerBus
  */
 private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
   extends SparkListener with ListenerBus[StreamingListener, StreamingListenerEvent] {

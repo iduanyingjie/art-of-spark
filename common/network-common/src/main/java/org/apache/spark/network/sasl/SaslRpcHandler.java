@@ -41,6 +41,11 @@ import org.apache.spark.network.util.TransportConf;
  *
  * Note that the authentication process consists of multiple challenge-response pairs, each of
  * which are individual RPCs.
+ *
+ * 在委托给子RPC处理程序之前执行SASL认证的RPC处理程序。 如果给定的连接已被成功验证，委托将仅接收消息。
+ * 连接最多可以验证一次。
+ *
+ * 请注意，身份验证过程由多个质询 - 响应对组成，每个响应对都是单独的RPCs。
  */
 class SaslRpcHandler extends RpcHandler {
   private static final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
@@ -77,6 +82,7 @@ class SaslRpcHandler extends RpcHandler {
   public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
     if (isComplete) {
       // Authentication complete, delegate to base handler.
+      // 将消息传递给SaslRpcHandler所代理的下游RpcHandler并返回
       delegate.receive(client, message, callback);
       return;
     }
@@ -84,6 +90,7 @@ class SaslRpcHandler extends RpcHandler {
     ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
     SaslMessage saslMessage;
     try {
+      // 对客户端发送的消息进行SASL解密
       saslMessage = SaslMessage.decode(nettyBuf);
     } finally {
       nettyBuf.release();
@@ -92,12 +99,14 @@ class SaslRpcHandler extends RpcHandler {
     if (saslServer == null) {
       // First message in the handshake, setup the necessary state.
       client.setClientId(saslMessage.appId);
+      // 如果saslServer还未创建，则需要创建SparkSaslServer
       saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder,
         conf.saslServerAlwaysEncrypt());
     }
 
     byte[] response;
     try {
+      // 使用saslServer处理已解密的消息
       response = saslServer.response(JavaUtils.bufferToArray(
         saslMessage.body().nioByteBuffer()));
     } catch (IOException ioe) {
@@ -112,9 +121,11 @@ class SaslRpcHandler extends RpcHandler {
     // messages are being written to the channel while negotiation is still going on.
     if (saslServer.isComplete()) {
       logger.debug("SASL authentication successful for channel {}", client);
+      // SASL认证交换已完成
       isComplete = true;
       if (SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("Enabling encryption for channel {}", client);
+        // 对管道进行SASL加密
         SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
         saslServer = null;
       } else {

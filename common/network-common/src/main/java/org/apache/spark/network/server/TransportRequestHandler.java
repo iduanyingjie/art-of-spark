@@ -66,7 +66,10 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   /** The Netty channel that this handler is associated with. */
   private final Channel channel;
 
-  /** Client on the same channel allowing us to talk back to the requester. */
+  /**
+   * Client on the same channel allowing us to talk back to the requester.
+   * 客户端可以在同一个channel上让我们回复请求者。
+   */
   private final TransportClient reverseClient;
 
   /** Handles all RPC messages. */
@@ -154,6 +157,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   private void processStreamRequest(final StreamRequest req) {
     ManagedBuffer buf;
     try {
+      // 调用StreamManager的openStream方法将获取到的流数据封装为ManagedBuffer
       buf = streamManager.openStream(req.streamId);
     } catch (Exception e) {
       logger.error(String.format(
@@ -162,6 +166,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       return;
     }
 
+    // 当成功或者失败时调用respond方法向客户端响应
     if (buf != null) {
       respond(new StreamResponse(req.streamId, buf.size(), buf));
     } else {
@@ -170,6 +175,13 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
   }
 
+  /**
+   * RpcHandler是抽象类，其receive方法也是抽象方法，
+   * 具体操作由RpcHandler实现了receive方法的子类来完成。
+   * 在其receive方法的具体实现中回掉RpcResponseCallback的onSuccess或者onFailure方法。
+   * 从RpcResponseCallback的实现来看，无论结果成功还是失败，
+   * 都将调用respond方法对客户端进行响应。
+   */
   private void processRpcRequest(final RpcRequest req) {
     try {
       rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
@@ -191,6 +203,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
   }
 
+  /**
+   * 处理无需回复的RPC请求
+   */
   private void processOneWayMessage(OneWayMessage req) {
     try {
       rpcHandler.receive(reverseClient, req.body().nioByteBuffer());

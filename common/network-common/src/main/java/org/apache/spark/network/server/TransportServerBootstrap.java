@@ -24,7 +24,8 @@ import io.netty.channel.Channel;
  * to the server. This allows customizing the client channel to allow for things such as SASL
  * authentication.
  *
- * 当客户端连接到服务端时在服务端执行一次的引导程序
+ * 一旦客户端连接到服务器，它将在传输服务器的客户端通道上执行。
+ * 这允许定制客户端通道以允许诸如sasl认证之类的事情。
  */
 public interface TransportServerBootstrap {
   /**

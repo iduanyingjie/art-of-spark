@@ -154,6 +154,17 @@ public class TransportClient implements Closeable {
    * to be returned in the same order that they were requested, assuming only a single
    * TransportClient is used to fetch the chunks.
    *
+   * 从预先协商的streamid请求远程端的单个块。
+   *
+   * 大块指数从0开始。多次请求相同的块是有效的，但有些流可能不支持这种情况。
+   *
+   * 假设只有一个传输客户端用于获取块，多个fetchchunk请求可能同时处于未完成状态，
+   * 并且保证块将按照请求的相同顺序返回。
+   *
+   * 请求发送成功后，客户端将等待接收服务端的响应，
+   * 返回的消息会传递给TransportChannelHandler的channelRead方法，
+   * 消息最后交给TransportResponseHandler的handle方法来处理。
+   *
    * @param streamId Identifier that refers to a stream in the remote StreamManager. This should
    *                 be agreed upon by client and server beforehand.
    * @param chunkIndex 0-based index of the chunk to fetch
@@ -168,11 +179,17 @@ public class TransportClient implements Closeable {
       logger.debug("Sending fetch chunk request {} to {}", chunkIndex, getRemoteAddress(channel));
     }
 
+    // 使用流的标记streamId和块的索引chunkIndex创建StreamChunkId
     final StreamChunkId streamChunkId = new StreamChunkId(streamId, chunkIndex);
+    // 向handler添加StreamChunkId与回调类ChunkReceivedCallback的引用之间的关系
     handler.addFetchRequest(streamChunkId, callback);
 
+    // 调用Channel的writeAndFlush方法将块请求发送出去
     channel.writeAndFlush(new ChunkFetchRequest(streamChunkId)).addListener(
       new ChannelFutureListener() {
+        /**
+         * 当发送成功或者失败会回调该方法
+         */
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           if (future.isSuccess()) {
@@ -185,6 +202,7 @@ public class TransportClient implements Closeable {
             String errorMsg = String.format("Failed to send request %s to %s: %s", streamChunkId,
               getRemoteAddress(channel), future.cause());
             logger.error(errorMsg, future.cause());
+            // 将此次请求从outstandingFetches缓存中移除
             handler.removeFetchRequest(streamChunkId);
             channel.close();
             try {
@@ -244,6 +262,14 @@ public class TransportClient implements Closeable {
    * Sends an opaque message to the RpcHandler on the server-side. The callback will be invoked
    * with the server's response or upon any failure.
    *
+   * 向服务器端的RpcHandler发送一个不透明的消息。 回调将在服务器的响应或任何失败时调用。
+   *
+   * 通过 At least Once Delivery 原则保证请求不会丢失
+   *
+   * 请求发送成功后，客户端将等待接收服务端的响应，
+   * 返回的消息会传递给TransportChannelHandler的channelRead方法，
+   * 消息最后交给TransportResponseHandler的handle方法来处理。
+   *
    * @param message The message to send.
    * @param callback Callback to handle the RPC's reply.
    * @return The RPC's id.
@@ -254,11 +280,17 @@ public class TransportClient implements Closeable {
       logger.trace("Sending RPC to {}", getRemoteAddress(channel));
     }
 
+    // 使用UUID生成请求主键requestId
     final long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
+    // 添加requestId与RpcResponseCallback的引用之间的关系
     handler.addRpcRequest(requestId, callback);
 
+    // 发送RPC请求
     channel.writeAndFlush(new RpcRequest(requestId, new NioManagedBuffer(message))).addListener(
       new ChannelFutureListener() {
+        /**
+         * 当发送成功或者失败会回调该方法
+         */
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           if (future.isSuccess()) {
@@ -271,6 +303,7 @@ public class TransportClient implements Closeable {
             String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
               getRemoteAddress(channel), future.cause());
             logger.error(errorMsg, future.cause());
+            // 将此次请求从outstandingRpcs缓存中移除
             handler.removeRpcRequest(requestId);
             channel.close();
             try {
@@ -288,6 +321,8 @@ public class TransportClient implements Closeable {
   /**
    * Synchronously sends an opaque message to the RpcHandler on the server-side, waiting for up to
    * a specified timeout for a response.
+   *
+   * 向服务端发送异步的RPC请求，并根据指定的超时时间等待
    */
   public ByteBuffer sendRpcSync(ByteBuffer message, long timeoutMs) {
     final SettableFuture<ByteBuffer> result = SettableFuture.create();
@@ -321,6 +356,7 @@ public class TransportClient implements Closeable {
    * Sends an opaque message to the RpcHandler on the server-side. No reply is expected for the
    * message, and no delivery guarantees are made.
    *
+   * 向服务端发送RPC的请求，但是并不期望能够获取响应，因而不能保证投递的可靠性。
    * @param message The message to send.
    */
   public void send(ByteBuffer message) {

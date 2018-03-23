@@ -54,8 +54,10 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   private final Channel channel;
 
+  // 用于缓存发出的块请求信息
   private final Map<StreamChunkId, ChunkReceivedCallback> outstandingFetches;
 
+  // 用于缓存发出的RPC请求信息
   private final Map<Long, RpcResponseCallback> outstandingRpcs;
 
   private final Queue<StreamCallback> streamCallbacks;
@@ -168,15 +170,22 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       }
     } else if (message instanceof RpcResponse) {
       RpcResponse resp = (RpcResponse) message;
+      // 使用RpcResponse对应的RpcRequest的主键requestId，
+      // 从outstandingRpcs缓存中获取注册的RpcResponseCallback，
+      // 这个RpcResponseCallback就是传递给TransportClient.sendRpc()方法的RpcResponseCallback
       RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({} bytes) since it is not outstanding",
           resp.requestId, getRemoteAddress(channel), resp.body().size());
       } else {
+        // 移除outstandingRpcs缓存中的requestId和RpcResponseCallback注册信息
         outstandingRpcs.remove(resp.requestId);
         try {
+          // 调用RpcResponseCallback的onSuccess方法，处理成功响应后的具体逻辑。
+          // 这里的RpcResponseCallback需要在各个使用TransportClient的sendRpc方法的场景中分别实现。
           listener.onSuccess(resp.body().nioByteBuffer());
         } finally {
+          // 释放RpcResponse的body，回收资源
           resp.body().release();
         }
       }
@@ -188,6 +197,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
           resp.requestId, getRemoteAddress(channel), resp.errorString);
       } else {
         outstandingRpcs.remove(resp.requestId);
+        // 调用RpcResponseCallback的onFailure方法，处理失败响应后的具体逻辑。
         listener.onFailure(new RuntimeException(resp.errorString));
       }
     } else if (message instanceof StreamResponse) {

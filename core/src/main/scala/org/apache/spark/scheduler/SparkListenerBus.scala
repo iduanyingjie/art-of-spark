@@ -21,6 +21,8 @@ import org.apache.spark.util.ListenerBus
 
 /**
  * A [[SparkListenerEvent]] bus that relays [[SparkListenerEvent]]s to its listeners
+ *
+ * 用于将SparkListenerEvent类型的事件投递到SparkListenerInterface类型的监听器。
  */
 private[spark] trait SparkListenerBus
   extends ListenerBus[SparkListenerInterface, SparkListenerEvent] {

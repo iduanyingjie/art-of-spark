@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   // Marked `private[spark]` for access in tests.
+  // 用于维护所有注册的监听器
   private[spark] val listeners = new CopyOnWriteArrayList[L]
 
   /**
@@ -51,6 +52,8 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   /**
    * Post the event to all registered listeners. The `postToAll` caller should guarantee calling
    * `postToAll` in the same thread for all events.
+   *
+   * 此方法的作用是将事件投递给所有的监听器
    */
   def postToAll(event: E): Unit = {
     // JavaConverters can create a JIterableWrapper if we use asScala.
@@ -74,6 +77,9 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    */
   protected def doPostEvent(listener: L, event: E): Unit
 
+  /**
+   * 查找与指定类型相同的监听器列表
+   */
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
     listeners.asScala.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq

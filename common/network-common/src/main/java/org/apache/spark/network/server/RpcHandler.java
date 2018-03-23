@@ -67,6 +67,12 @@ public abstract class RpcHandler {
    * call "{@link #receive(TransportClient, ByteBuffer, RpcResponseCallback)}" and log a warning if
    * any of the callback methods are called.
    *
+   * 收到一条不希望回复的rpc消息。
+   * 默认实现将调用“receive(TransportClient, ByteBuffer, RpcResponseCallback)”，
+   * 并在调用任何回调方法时记录警告。
+   *
+   * 不会对客户端进行响应
+   *
    * @param client A channel client which enables the handler to make requests back to the sender
    *               of this RPC. This will always be the exact same object for a particular channel.
    * @param message The serialized bytes of the RPC.

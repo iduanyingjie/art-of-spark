@@ -455,6 +455,7 @@ public class SparkSaslSuite {
 
     @Override
     public RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler) {
+      // 将自身加入Netty的管道中实现引导
       channel.pipeline().addFirst("encryptionChecker", this);
       return rpcHandler;
     }
