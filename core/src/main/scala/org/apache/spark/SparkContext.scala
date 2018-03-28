@@ -260,10 +260,13 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def env: SparkEnv = _env
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
+  // 用于每个本地文件的URL与添加此文件到addedFiles时的时间戳之间的映射缓存。
   private[spark] val addedFiles = new ConcurrentHashMap[String, Long]().asScala
+  // 用于每个本地jar文件的URL与添加此文件到addedJars时的时间戳之间的映射缓存。
   private[spark] val addedJars = new ConcurrentHashMap[String, Long]().asScala
 
   // Keeps track of all persisted RDDs
+  // 用于对所有持久化的RDD保持跟踪
   private[spark] val persistentRdds = {
     val map: ConcurrentMap[Int, RDD[_]] = new MapMaker().weakValues().makeMap[Int, RDD[_]]()
     map.asScala
@@ -289,9 +292,11 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def executorMemory: Int = _executorMemory
 
   // Environment variables to pass to our executors.
+  // 用于存储环境变量。executorEnvs中环境变量都将传递给执行任务的Executor使用。
   private[spark] val executorEnvs = HashMap[String, String]()
 
   // Set SPARK_USER for user who is running SparkContext.
+  // 当前系统的登录用户，也可以通过系统环境变量SPARK_USER进行设置
   val sparkUser = Utils.getCurrentUserName()
 
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
@@ -324,9 +329,11 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
 
+  // RDD计算过程中保存检查点时所需要的目录
   private[spark] var checkpointDir: Option[String] = None
 
   // Thread Local variable that can be used by users to pass information down the stack
+  // 由InheritableThreadLocal保护的线程本地变量，其中的属性值可以沿着线程栈传递下去，供用户使用
   protected[spark] val localProperties = new InheritableThreadLocal[Properties] {
     override protected def childValue(parent: Properties): Properties = {
       // Note: make a clone such that changes in the parent properties aren't reflected in
