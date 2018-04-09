@@ -278,8 +278,10 @@ private[spark] class ExecutorAllocationManager(
   private def schedule(): Unit = synchronized {
     val now = clock.getTimeMillis
 
+    // 重新计算所需的Executor数量，并更新请求的Executor数量
     updateAndSyncNumExecutorsTarget(now)
 
+    // 对过期的Executor进行删除
     val executorIdsToBeRemoved = ArrayBuffer[String]()
     removeTimes.retain { case (executorId, expireTime) =>
       val expired = now >= expireTime
@@ -290,6 +292,7 @@ private[spark] class ExecutorAllocationManager(
       !expired
     }
     if (executorIdsToBeRemoved.nonEmpty) {
+      // kill Executor
       removeExecutors(executorIdsToBeRemoved)
     }
   }
@@ -304,11 +307,20 @@ private[spark] class ExecutorAllocationManager(
    * If not, and the add time has expired, see if we can request new executors and refresh the add
    * time.
    *
+   * 更新我们的执行程序的目标数量并与集群管理器同步结果。
+   *
+   * 检查我们现有的分配和我们以前提出的请求是否超出了我们目前的需求。
+   * 如果是这样，请截断我们的目标并让群集管理器知道，以便它可以取消不需要的挂起请求。
+   *
+   * 如果没有，并且添加时间已过期，请参阅我们是否可以请求新的执行者并刷新添加时间。
+   *
    * @return the delta in the target number of executors.
    */
   private def updateAndSyncNumExecutorsTarget(now: Long): Int = synchronized {
+    // 获取实际需要的Executor的最大数量maxNeeded
     val maxNeeded = maxNumExecutorsNeeded
 
+    // 如果ExecutorAllocationManager还在初始化，返回0
     if (initializing) {
       // Do not change our target while we are still initializing,
       // Otherwise the first job may have to ramp up unnecessarily
@@ -316,6 +328,11 @@ private[spark] class ExecutorAllocationManager(
     } else if (maxNeeded < numExecutorsTarget) {
       // The target number exceeds the number we actually need, so stop adding new
       // executors and inform the cluster manager to cancel the extra pending requests
+
+      // 如果Executor的目标数量（numExecutorsTarget）超过我们实际需要的数量（maxNeeded），
+      // 那么首先将numExecutorsTarget设置为minNumExecutors与maxNeeded之间的最大值，
+      // 然后调用ExecutorAllocationClient.requestTotalExecutors方法重新请求numExecutorsTarget指定的目标Executor数量，
+      // 以此停止添加的型的执行程序，并通知集群管理器取消额外的待处理Executor的请求，最后返回减少的Executor数量
       val oldNumExecutorsTarget = numExecutorsTarget
       numExecutorsTarget = math.max(maxNeeded, minNumExecutors)
       numExecutorsToAdd = 1

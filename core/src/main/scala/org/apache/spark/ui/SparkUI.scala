@@ -56,12 +56,17 @@ private[spark] class SparkUI private (
   with Logging
   with UIRoot {
 
+  // 标记当前SparkUI能够提供“杀死”Stage或者Job的链接
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
   var appId: String = _
 
   /** Initialize all components of the server. */
   def initialize() {
+    /**
+     * 构建页面布局并给每个WebUITab中的所有WebUIPage创建
+     * 对应的ServletContextHandler，这一步使用attachTab方法
+     */
     val jobsTab = new JobsTab(this)
     attachTab(jobsTab)
     val stagesTab = new StagesTab(this)
@@ -69,7 +74,15 @@ private[spark] class SparkUI private (
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
     attachTab(new ExecutorsTab(this))
+
+    // 调用JettyUtils的createStaticHandler方法创建对静态目录
+    // org/apache/spark/ui/static提供文件服务的ServletContextHandler，
+    // 并使用attachHandler方法追加到SparkUI的服务中
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
+
+    // 调用JettyUtils的createRedirectHandler方法创建几个将用户
+    // 对源路径的请求重定向到目标路径的ServletContextHandler。例如，
+    // 将用户对根路径的“/”的请求重定向到目标路径“/jobs”的ServletContextHandler
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))
     // These should be POST only, but, the YARN AM proxy won't proxy POSTs
@@ -205,9 +218,13 @@ private[spark] object SparkUI {
       listener
     }
 
+    // 用于对JVM参数，Spark属性，Java系统属性，classpath等进行监控
     val environmentListener = new EnvironmentListener
+    // 用于维护Executor的存储状态
     val storageStatusListener = new StorageStatusListener(conf)
+    // 用于准备将Executor信息展示在ExecutorTab
     val executorsListener = new ExecutorsListener(storageStatusListener, conf)
+    // 用于准备将Executor相关存储信息展示在BlockManagerUI
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)
 

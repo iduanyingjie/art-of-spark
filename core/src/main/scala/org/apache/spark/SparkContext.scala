@@ -197,6 +197,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _eventLogCodec: Option[String] = None
   private var _env: SparkEnv = _
   private var _jobProgressListener: JobProgressListener = _
+  // Spark状态跟踪器
   private var _statusTracker: SparkStatusTracker = _
   private var _progressBar: Option[ConsoleProgressBar] = None
   private var _ui: Option[SparkUI] = None
@@ -406,6 +407,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
 
+    // 获取用户设置的jar和其他文件
     _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.nonEmpty))
       .toSeq.flatten
@@ -447,6 +449,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _statusTracker = new SparkStatusTracker(this)
 
+    // 可以配置spark.ui.showConsoleProgress属性为false，取消对ConsoleProgressBar的创建
     _progressBar =
       if (_conf.getBoolean("spark.ui.showConsoleProgress", true) && !log.isInfoEnabled) {
         Some(new ConsoleProgressBar(this))
@@ -454,6 +457,7 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
 
+    // 创建SparkUI
     _ui =
       if (conf.getBoolean("spark.ui.enabled", true)) {
         Some(SparkUI.createLiveUI(this, _conf, listenerBus, _jobProgressListener,
@@ -464,6 +468,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     // Bind the UI before starting the task scheduler to communicate
     // the bound port to the cluster manager properly
+    // 绑定端口
     _ui.foreach(_.bind())
 
     _hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(_conf)
@@ -1717,6 +1722,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   *
+   * 将调用SparkEnv的RpcEnv的fileServer的addJar方法把jar文件添加到Driver本地的RpcEnv的NettyStreamManager中，
+   * 并将jar文件添加的时间戳信息缓存到addedJars中
    */
   def addJar(path: String) {
     if (path == null) {
@@ -2164,10 +2172,16 @@ class SparkContext(config: SparkConf) extends Logging {
    * Registers listeners specified in spark.extraListeners, then starts the listener bus.
    * This should be called after all internal listeners have been registered with the listener bus
    * (e.g. after the web UI and event logging listeners have been registered).
+   *
+   * 注册spark.extraListeners中指定的监听器，然后启动监听器总线。
+   * 在监听器总线注册完所有内部监听器之后（例如，在注册了Web UI和事件日志记录监听器之后），应该调用它。
+   *
+   * 添加用于自定义SparkListener的地方
    */
   private def setupAndStartListenerBus(): Unit = {
     // Use reflection to instantiate listeners specified via `spark.extraListeners`
     try {
+      // 获取用户自定义的类名，通过,分隔
       val listenerClassNames: Seq[String] =
         conf.get("spark.extraListeners", "").split(',').map(_.trim).filter(_ != "")
       for (className <- listenerClassNames) {
@@ -2184,6 +2198,7 @@ class SparkContext(config: SparkConf) extends Logging {
         lazy val zeroArgumentConstructor = constructors.find { c =>
           c.getParameterTypes.isEmpty
         }
+        // 通过反射生成每一个实例
         val listener: SparkListenerInterface = {
           if (constructorTakingSparkConf.isDefined) {
             constructorTakingSparkConf.get.newInstance(conf)
@@ -2199,6 +2214,7 @@ class SparkContext(config: SparkConf) extends Logging {
                 " parameter from breaking Spark's ability to find a valid constructor.")
           }
         }
+        // 添加到事件总线的监听器列表中
         listenerBus.addListener(listener)
         logInfo(s"Registered listener $className")
       }
@@ -2234,8 +2250,11 @@ class SparkContext(config: SparkConf) extends Logging {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
+      // 将环境的JVM参数，Spark属性，系统属性，classpath等信息设置为环境明细信息。
       val environmentDetails = SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths,
         addedFilePaths)
+      // 生成事件SparkListenerEnvironmentUpdate，投递到事件总线listenerBus，
+      // 此事件最终被EnvironmentListener监听，并影响EnvironmentPage页面中的输出内容
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }

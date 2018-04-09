@@ -56,22 +56,30 @@ private class CleanupTaskWeakReference(
  * This maintains a weak reference for each RDD, ShuffleDependency, and Broadcast of interest,
  * to be processed when the associated object goes out of scope of the application. Actual
  * cleanup is performed in a separate daemon thread.
+ *
+ * 用于清理那些超出应用范围的RDD，Shuffle对应的map任务状态，Shuffle元数据，Broadcast对象及RDD的checkpoint数据。
  */
 private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /**
    * A buffer to ensure that `CleanupTaskWeakReference`s are not garbage collected as long as they
    * have not been handled by the reference queue.
+   *
+   * 缓存AnyRef的虚引用
    */
   private val referenceBuffer =
     Collections.newSetFromMap[CleanupTaskWeakReference](new ConcurrentHashMap)
 
+  // 缓存顶级的AnyRef引用
   private val referenceQueue = new ReferenceQueue[AnyRef]
 
+  // 缓存清理工作的监听器数组
   private val listeners = new ConcurrentLinkedQueue[CleanerListener]()
 
+  // 用于具体清理工作的线程。此线程为守护线程，名为Spark Context Cleaner
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
 
+  // 用于执行GC的调度线程池，此线程池只包含一个线程，启动的线程名称以context-cleaner-periodic-gc开头
   private val periodicGCService: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("context-cleaner-periodic-gc")
 
@@ -82,6 +90,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * In long-running applications with large driver JVMs, where there is little memory pressure
    * on the driver, this may happen very occasionally or not at all. Not cleaning at all may
    * lead to executors running out of disk space after a while.
+   *
+   * 执行GC的间隔时间
    */
   private val periodicGCInterval =
     sc.conf.getTimeAsSeconds("spark.cleaner.periodicGC.interval", "30min")
@@ -95,6 +105,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * issue inter-dependent blocking RPC messages to each other at high frequencies. This happens,
    * for instance, when the driver performs a GC and cleans up all broadcast blocks that are no
    * longer in scope.
+   *
+   * 清理非Shuffle的其他数据是否是阻塞式的
    */
   private val blockOnCleanupTasks = sc.conf.getBoolean(
     "spark.cleaner.referenceTracking.blocking", true)
@@ -108,6 +120,10 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * the cleanup of RDDs and broadcasts. This is intended to be a temporary workaround,
    * until the real RPC issue (referred to in the comment above `blockOnCleanupTasks`) is
    * resolved.
+   *
+   * 清理Shuffle的数据是否是阻塞式的
+   * 清理Shuffle数据包括清理MapOutputTracker中指定的ShuffleId对应的map任务状态和
+   * ShuffleManager中注册的ShuffleId对应的Shuffle元数据
    */
   private val blockOnShuffleCleanupTasks = sc.conf.getBoolean(
     "spark.cleaner.referenceTracking.blocking.shuffle", false)
