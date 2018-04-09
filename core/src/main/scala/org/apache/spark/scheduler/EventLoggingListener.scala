@@ -129,7 +129,10 @@ private[spark] class EventLoggingListener(
     }
   }
 
-  /** Log the event as JSON. */
+  /**
+    * Log the event as JSON.
+    * 将事件转换为json字符串后写入日志文件
+    */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
     val eventJson = JsonProtocol.sparkEventToJson(event)
     // scalastyle:off println
