@@ -53,6 +53,9 @@ private[netty] case class RemoteProcessConnectionError(cause: Throwable, remoteA
 
 /**
  * An inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
+ *
+ * 每个RpcEndpoint都有一个对应的Inbox，这个盒子里面有个存储InboxMessage消息的列表messages，
+ * 所有消息都将缓存在messages列表里面，并由RpcEndpoint异步处理这些消息。
  */
 private[netty] class Inbox(
     val endpointRef: NettyRpcEndpointRef,
@@ -61,6 +64,7 @@ private[netty] class Inbox(
 
   inbox =>  // Give this an alias so we can use it more clearly in closures.
 
+  /** 消息列表。用于缓存需要由对应RpcEndpoint处理的消息，即与Inbox在同一个EndpointData中的RpcEndpoint */
   @GuardedBy("this")
   protected val messages = new java.util.LinkedList[InboxMessage]()
 
@@ -86,10 +90,15 @@ private[netty] class Inbox(
    */
   def process(dispatcher: Dispatcher): Unit = {
     var message: InboxMessage = null
+    // 因为messages只是普通的java.util.LinkedList，其本身不是线程安全的。为了增加并发安全性，需要通过同步保护。
     inbox.synchronized {
+      // 进行线程并发检查。具体是，如果不允许多个线程同时处理messages中的消息（enableConcurrent=false），
+      // 并且当前激活线程数（numActiveThreads）不为0，这说明已经有线程在处理消息，所以当前线程不被允许再去处理消息（使用return返回）
       if (!enableConcurrent && numActiveThreads != 0) {
         return
       }
+      // 从messages获取消息。如果有消息未处理，则当前线程需要处理此消息，因为算是一个新的激活线程（需要将numActiveThreads + 1）
+      // 如果messages中没有消息了（一般发生在多线程的情况下），则直接返回。
       message = messages.poll()
       if (message != null) {
         numActiveThreads += 1
@@ -98,6 +107,8 @@ private[netty] class Inbox(
       }
     }
     while (true) {
+      // 根据消息类型进行匹配，并执行对应的逻辑。如果匹配执行过程中也许发生错误，当发生错误的时候，
+      // 我们希望当前Inbox所对应的RpcEndpoint的错误处理方法onError可以接收到这些错误信息。
       safelyCall(endpoint) {
         message match {
           case RpcMessage(_sender, content, context) =>
@@ -150,11 +161,15 @@ private[netty] class Inbox(
       inbox.synchronized {
         // "enableConcurrent" will be set to false after `onStop` is called, so we should check it
         // every time.
+        // 对消息处理完毕之后，当前线程作为之前已经激活的线程时候还有存在的必要？
+        // 如果不允许多个线程同时处理messages中的消息 并且 当前激活的线程数多于一个，
+        // 那么需要将当前线程退出并将numActiveThreads - 1
         if (!enableConcurrent && numActiveThreads != 1) {
           // If we are not the only one worker, exit
           numActiveThreads -= 1
           return
         }
+        // 如果messages已经没有消息要处理了，这说明当前线程无论如何也该返回并将numActiveThreads - 1
         message = messages.poll()
         if (message == null) {
           numActiveThreads -= 1

@@ -32,9 +32,14 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * A message dispatcher, responsible for routing RPC messages to the appropriate endpoint(s).
+ *
+ * Dispatcher负责将RPC消息路由到要该对此消息处理的RpcEndpoint
  */
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
 
+  /**
+   * Inbox与RpcEndpoint，NettyRpcEndpointRef通过此EndpointData相关联
+   */
   private class EndpointData(
       val name: String,
       val endpoint: RpcEndpoint,
@@ -204,12 +209,19 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
       try {
         while (true) {
           try {
+            // 从receivers获取EndpointData，其Inbox的messages列表中肯定有了新的消息。
+            // 换言之，只有Inbox的messages列表中有了新的消息此EndpointData才会被放入receivers中。
+            // 由于receivers是一个阻塞队列，所以当receivers中没有EndpointData时，MessageLoop线程会被阻塞。
             val data = receivers.take()
             if (data == PoisonPill) {
               // Put PoisonPill back so that other MessageLoops can see it.
+              // 如果取到的EndpointData是一个PoisonPill（毒药），那么此MessageLoop线程将退出（通过return语句）。
+              // 将PoisonPill重新放入receivers，是因为threadpool中有可能不止一个MessageLoop线程，为了让大家都“毒发身亡”
+              // 还需要将PoisonPill重新放入receivers中，这样其他“活着”的线程就会再次误食“毒药”，达到所有MessageLoop都结束的效果。
               receivers.offer(PoisonPill)
               return
             }
+            // 对inbox中的消息进行处理
             data.inbox.process(Dispatcher.this)
           } catch {
             case NonFatal(e) => logError(e.getMessage, e)

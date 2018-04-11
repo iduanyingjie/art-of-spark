@@ -46,13 +46,20 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
 
   /**
    * return the address for the [[RpcEndpointRef]]
+   *
+   * 返回当前RpcEndpointRef对应的RpcEndpoint的RPC地址
    */
   def address: RpcAddress
 
+  /**
+   * 返回当前RpcEndpointRef对应的RpcEndpoint的RPC名称
+   */
   def name: String
 
   /**
    * Sends a one-way asynchronous message. Fire-and-forget semantics.
+   *
+   * 发送单向异步消息（at-most-once）
    */
   def send(message: Any): Unit
 
