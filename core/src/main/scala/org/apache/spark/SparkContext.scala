@@ -573,10 +573,13 @@ class SparkContext(config: SparkConf) extends Logging {
 
     setupAndStartListenerBus()
     postEnvironmentUpdate()
+    // 向事件总线投递SparkListenerApplicationStart事件
     postApplicationStart()
 
     // Post init
+    // 等待SchedulerBackend准备完成
     _taskScheduler.postStartHook()
+    // 向度量系统注册Source
     _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _executorAllocationManager.foreach { e =>
@@ -586,6 +589,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
+    // 添加SparkContext关闭钩子
     logDebug("Adding shutdown hook") // force eager creation of logger
     _shutdownHookRef = ShutdownHookManager.addShutdownHook(
       ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
@@ -2263,6 +2267,7 @@ class SparkContext(config: SparkConf) extends Logging {
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having finished construction.
   // NOTE: this must be placed at the end of the SparkContext constructor.
+  // 将标SparkContext记为激活
   SparkContext.setActiveContext(this, allowMultipleContexts)
 }
 

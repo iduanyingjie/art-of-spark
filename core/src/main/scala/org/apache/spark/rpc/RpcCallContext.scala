@@ -20,6 +20,16 @@ package org.apache.spark.rpc
 /**
  * A callback that [[RpcEndpoint]] can use to send back a message or failure. It's thread-safe
  * and can be called in any thread.
+ *
+ * RpcCallContext是用于分离核心业务逻辑和底层传输的桥接方法，
+ * 这也可以看出Spark RPC多用组合，聚合以及回调callback的设计模式来做OO抽象，
+ * 这样可以剥离业务逻辑->RPC封装（Spark-core模块内）->底层通信（spark-network-common）三者。
+ * RpcCallContext可以用于回复正常的响应以及错误异常
+ *
+ * RpcCallContext也分为了两个子类，分别是LocalNettyRpcCallContext和RemoteNettyRpcCallContext，
+ * 这个主要是框架内部使用，如果是本地就走LocalNettyRpcCallContext直接调用Endpoint即可，
+ * 否则就走RemoteNettyRpcCallContext需要通过RPC和远程交互，这点也体现了RPC的核心概念，
+ * 就是如何执行另外一个地址空间上的函数、方法，就仿佛在本地调用一样。
  */
 private[spark] trait RpcCallContext {
 

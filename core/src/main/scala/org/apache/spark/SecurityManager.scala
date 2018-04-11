@@ -181,6 +181,10 @@ import org.apache.spark.util.Utils
  *  options for master and workers. In this mode, the user may allow the executors to use the SSL
  *  settings inherited from the worker which spawned that executor. It can be accomplished by
  *  setting `spark.ssl.useNodeLocalConf` to `true`.
+ *
+ *  主要对账号，权限及身份认真进行设置和管理。如果Spark的部署模式为 YARN，则需要生成secret key（密钥）并存入Hadoop UGI
+ *  而在其他模式下，则需要设置环境变量_SPARK_AUTH_SECRET(优先级更高)或spark.authenticate.secret属性指定的secret key(密钥)。
+ *  SecurityManager还会给当前系统设置默认的口令认证实例。
  */
 
 private[spark] class SecurityManager(
@@ -238,6 +242,7 @@ private[spark] class SecurityManager(
   // This is needed by the HTTP client fetching from the HttpServer. Put here so its
   // only set once.
   if (authOn) {
+    // 设置默认的口令认证实例Authenticator，它的getPasswordAuthentication方法用于获取用户名，密码
     Authenticator.setDefault(
       new Authenticator() {
         override def getPasswordAuthentication(): PasswordAuthentication = {

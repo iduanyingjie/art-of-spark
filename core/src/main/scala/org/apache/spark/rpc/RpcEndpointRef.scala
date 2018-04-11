@@ -26,12 +26,22 @@ import org.apache.spark.util.RpcUtils
 
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
+ *
+ * RpcEndpointRef类似于Akka中ActorRef，顾名思义，它是RpcEndpoint的引用，提供的方法send等同于!,
+ * ask方法等同于?，send用于单向发送请求（RpcEndpoint中的receive响应它），提供fire-and-forget语义，
+ * 而ask提供请求响应的语义（RpcEndpoint中的receiveAndReply响应它），默认是需要返回response的，
+ * 带有超时机制，可以同步阻塞等待，也可以返回一个Future句柄，不阻塞发起请求的工作线程。
+ *
+ * RpcEndpointRef是客户端发起请求的入口，它可以从RpcEnv中获取，并且聪明的做本地调用或者RPC。
  */
 private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   extends Serializable with Logging {
 
+  // RPC最大重新连接次数
   private[this] val maxRetries = RpcUtils.numRetries(conf)
+  // RPC每次重新连接需要等待的毫秒数
   private[this] val retryWaitMs = RpcUtils.retryWaitMs(conf)
+  // RPC的ask操作默认的超时时间
   private[this] val defaultAskTimeout = RpcUtils.askRpcTimeout(conf)
 
   /**
