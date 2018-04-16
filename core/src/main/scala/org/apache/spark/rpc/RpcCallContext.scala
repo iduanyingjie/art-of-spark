@@ -21,6 +21,8 @@ package org.apache.spark.rpc
  * A callback that [[RpcEndpoint]] can use to send back a message or failure. It's thread-safe
  * and can be called in any thread.
  *
+ * RpcCallContext是为RpcEndpoint提供的一个回调，这个回调用来返回消息或者错误。
+ *
  * RpcCallContext是用于分离核心业务逻辑和底层传输的桥接方法，
  * 这也可以看出Spark RPC多用组合，聚合以及回调callback的设计模式来做OO抽象，
  * 这样可以剥离业务逻辑->RPC封装（Spark-core模块内）->底层通信（spark-network-common）三者。

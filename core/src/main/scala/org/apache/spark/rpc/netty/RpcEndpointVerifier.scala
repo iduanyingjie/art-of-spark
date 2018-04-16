@@ -26,6 +26,8 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
  *
  * 每一个RpcEnv初始化的时候都会注册上这个Endpoint，
  * 因为客户端的调用每次都需要先询问服务端是否存在某一个Endpoint。
+ *
+ * 它提供了查询当前RpcEndpointVerifier所在RpcEnv的Dispatcher中时候存在请求中指定名称所对应的RpcEndpoint
  */
 private[netty] class RpcEndpointVerifier(override val rpcEnv: RpcEnv, dispatcher: Dispatcher)
   extends RpcEndpoint {

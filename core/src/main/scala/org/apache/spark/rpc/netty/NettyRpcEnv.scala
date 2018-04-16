@@ -67,6 +67,7 @@ private[netty] class NettyRpcEnv(
     }
   }
 
+  // 用于常规的发送请求和接收响应
   private val clientFactory = transportContext.createClientFactory(createClientBootstraps())
 
   /**
@@ -76,9 +77,12 @@ private[netty] class NettyRpcEnv(
    *
    * It also allows for different configuration of certain properties, such as the number of
    * connections per peer.
+   *
+   * 用于文件下载
    */
   @volatile private var fileDownloadFactory: TransportClientFactory = _
 
+  // 用于处理请求超时的调度器
   val timeoutScheduler = ThreadUtils.newDaemonSingleThreadScheduledExecutor("netty-rpc-env-timeout")
 
   // Because TransportClientFactory.createClient is blocking, we need to run it in this thread pool
@@ -108,6 +112,7 @@ private[netty] class NettyRpcEnv(
     }
   }
 
+  /** 创建TransportServer */
   def startServer(bindAddress: String, port: Int): Unit = {
     val bootstraps: java.util.List[TransportServerBootstrap] =
       if (securityManager.isAuthenticationEnabled()) {
@@ -116,6 +121,7 @@ private[netty] class NettyRpcEnv(
         java.util.Collections.emptyList()
       }
     server = transportContext.createServer(bindAddress, port, bootstraps)
+    //
     dispatcher.registerRpcEndpoint(
       RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher))
   }
@@ -559,11 +565,15 @@ private[netty] class NettyRpcHandler(
   // A variable to track the remote RpcEnv addresses of all clients
   private val remoteAddresses = new ConcurrentHashMap[RpcAddress, RpcAddress]()
 
+  /** 对客户端进行响应 */
   override def receive(
       client: TransportClient,
       message: ByteBuffer,
       callback: RpcResponseCallback): Unit = {
+    // 调用internalReceive方法将ByteBuffer类型的message转换为RequestMessage
     val messageToDispatch = internalReceive(client, message)
+    // 调用Dispatcher的postRemoteMessage方法，将消息转换为RpcMessage后放入Inbox的消息列表
+    // 在Inbox中的process方法中，将调用RpcEndpoint的receiveAndReply方法，处理完消息后会对客户端进行回复。
     dispatcher.postRemoteMessage(messageToDispatch, callback)
   }
 
@@ -575,9 +585,11 @@ private[netty] class NettyRpcHandler(
   }
 
   private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
+    // 从TransportClient中获取远程地址RpcAddress
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
+    // 对客户端发送的序列化后的消息（即ByteBuffer类型的消息）进行反序列化
     val requestMessage = nettyEnv.deserialize[RequestMessage](client, message)
     if (requestMessage.senderAddress == null) {
       // Create a new message with the socket address of the client as the sender.

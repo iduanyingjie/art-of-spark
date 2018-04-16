@@ -143,6 +143,7 @@ private[netty] class Inbox(
             val activeThreads = inbox.synchronized { inbox.numActiveThreads }
             assert(activeThreads == 1,
               s"There should be only a single active thread but found $activeThreads threads.")
+            // 移除RpcEndpoint与RpcEndpointRef的映射关系
             dispatcher.removeRpcEndpointRef(endpoint)
             endpoint.onStop()
             assert(isEmpty, "OnStop should be the last message")
@@ -196,8 +197,12 @@ private[netty] class Inbox(
       // We should disable concurrent here. Then when RpcEndpoint.onStop is called, it's the only
       // thread that is processing messages. So `RpcEndpoint.onStop` can release its resources
       // safely.
+      // 对于允许并发的情况，为了确保安全，应该将enableConcurrent设置为false
       enableConcurrent = false
+      // 设置当前Inbox为停止状态
       stopped = true
+      // 向messages中添加OnStop消息，为了能够处理OnStop消息，
+      // 只有Inbox所属的EndpointData放入receivers中，其messages列表中的消息才会被处理
       messages.add(OnStop)
       // Note: The concurrent events in messages will be processed one by one.
     }
